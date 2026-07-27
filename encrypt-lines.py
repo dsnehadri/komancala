@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Encrypt the cat's lines so they aren't readable in a public repo.
 
-Edit cat-lines.txt (one line per line, blank lines ignored), then:
+Edit cat-lines.txt (one line per line; blank lines and # comments ignored), then:
 
     python3 encrypt-lines.py "your password"
 
@@ -31,7 +31,13 @@ def main():
     source = pathlib.Path('cat-lines.txt')
     if not source.is_file():
         sys.exit('cat-lines.txt not found — decrypt the current ones first, or write new ones.')
-    lines = [line for line in source.read_text(encoding='utf-8').split('\n') if line.strip()]
+    # Blank lines and # comments are for the reader; everything else is a line
+    # the cat can say. A line that genuinely starts with # can be escaped as \#.
+    lines = []
+    for raw in source.read_text(encoding='utf-8').split('\n'):
+        if not raw.strip() or raw.lstrip().startswith('#'):
+            continue
+        lines.append(raw[1:] if raw.startswith('\\#') else raw)
     if not lines:
         sys.exit('cat-lines.txt is empty.')
 

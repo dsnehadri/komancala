@@ -9,3 +9,6 @@ _*
 
 # the cat lines in the clear — encrypted into catlines.enc
 cat-lines.txt
+
+# any variant of the plaintext lines
+cat-lines*.txt
