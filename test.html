@@ -1,0 +1,246 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>rules test</title>
+<pre id="out">running…</pre>
+<script type="module">
+import {
+  initialRoom, newGameState, applyMove, seatOf, bothSeated, normalizeRoom,
+  reduceClaimSeat, reduceMove, reduceNewGame, NO_TURN, identify, decryptPhoto, sowPath,
+  reduceKickSeats,
+} from './game.js';
+
+const lines = [];
+let fails = 0;
+const eq = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+function check(name, cond, extra) {
+  if (cond) lines.push('  ok   ' + name);
+  else { fails++; lines.push('  FAIL ' + name + ' ' + (extra === undefined ? '' : JSON.stringify(extra))); }
+}
+
+// ---- fresh state
+const fresh = initialRoom();
+check('board starts with 4s', eq(fresh.board, [4,4,4,4,4,4,0,4,4,4,4,4,4,0]), fresh.board);
+check('player 0 opens', fresh.turn === 0);
+check('no seats yet', !bothSeated(fresh));
+
+// ---- seating: your password owns a specific chair
+let room = reduceClaimSeat(null, { id: 'alice', name: 'Alice', seat: 0 });
+check('claiming into an empty room creates it', seatOf(room, 'alice') === 0, room.seats);
+room = reduceClaimSeat(room, { id: 'bob', name: 'Bob', seat: 1 });
+check('the other password gets the other seat', seatOf(room, 'bob') === 1, room.seats);
+check('both seated', bothSeated(room));
+room = reduceClaimSeat(room, { id: 'alice', name: 'Alice2', seat: 0 });
+check('re-claiming keeps your seat', seatOf(room, 'alice') === 0, room.seats);
+check('re-claiming updates your name', room.seats['0'].name === 'Alice2', room.seats);
+check('re-claiming does not disturb the other player', seatOf(room, 'bob') === 1, room.seats);
+
+// a claim without a seat (nobody can make one — there are only two passwords)
+const noSeat = reduceClaimSeat(room, { id: 'carol', name: 'Carol', seat: null });
+check('a seatless claim seats nobody', seatOf(noSeat, 'carol') === null, noSeat.seats);
+check('a seatless claim evicts nobody', bothSeated(noSeat) && seatOf(noSeat, 'alice') === 0);
+check('an out-of-range seat is refused',
+  seatOf(reduceClaimSeat(room, { id: 'carol', name: 'C', seat: 2 }), 'carol') === null);
+
+// reconnecting after the disconnect handler cleared your chair
+let dropped = { ...room, seats: { '1': room.seats['1'] } };
+dropped = reduceClaimSeat(dropped, { id: 'alice', name: 'Alice', seat: 0 });
+check('reconnect returns you to your own seat', seatOf(dropped, 'alice') === 0, dropped.seats);
+check('reconnect leaves the other player alone', seatOf(dropped, 'bob') === 1, dropped.seats);
+
+// a stale session of yours sitting in your chair under a different id
+let stale = { ...room, seats: { '0': { id: 'alice-old-tab', name: 'Alice' }, '1': room.seats['1'] } };
+stale = reduceClaimSeat(stale, { id: 'alice', name: 'Alice', seat: 0 });
+check('you take your chair back from your own stale session',
+  seatOf(stale, 'alice') === 0 && seatOf(stale, 'alice-old-tab') === null, stale.seats);
+
+// and if you somehow ended up in the wrong chair, you leave it
+let wrongChair = { seats: { '1': { id: 'alice', name: 'Alice' } }, ...newGameState(0), gamesPlayed: 0 };
+wrongChair.seats = { '1': { id: 'alice', name: 'Alice' } };
+wrongChair = reduceClaimSeat(wrongChair, { id: 'alice', name: 'Alice', seat: 0 });
+check('claiming your seat vacates the other one', seatOf(wrongChair, 'alice') === 0
+  && !wrongChair.seats['1'], wrongChair.seats);
+
+// ---- clearing out stale players
+const twoSeated = reduceClaimSeat(reduceClaimSeat(null, { id: 'alice', name: 'Alice', seat: 0 }),
+  { id: 'ghost', name: 'Ghost', seat: 1 });
+const kicked = reduceKickSeats(twoSeated, { id: 'alice', name: 'Alice', seat: 0 });
+check('kicking clears the other seat', !kicked.seats['1'], kicked.seats);
+check('kicking leaves you in yours', seatOf(kicked, 'alice') === 0, kicked.seats);
+check('kicking does not disturb the board', eq(kicked.board, twoSeated.board), kicked.board);
+check('kicking does not reset the game count', kicked.gamesPlayed === twoSeated.gamesPlayed);
+const kickedByTwo = reduceKickSeats(twoSeated, { id: 'ghost', name: 'Ghost', seat: 1 });
+check('player 2 can kick too', seatOf(kickedByTwo, 'ghost') === 1 && !kickedByTwo.seats['0'],
+  kickedByTwo.seats);
+check('kicking an empty room does nothing', reduceKickSeats(null, { id: 'a', seat: 0 }) === undefined);
+check('kicking without a seat is refused',
+  reduceKickSeats(twoSeated, { id: 'a', seat: null }) === undefined);
+// the kicked player's live client just sits back down
+check('a live player retakes their seat after a kick',
+  seatOf(reduceClaimSeat(kicked, { id: 'ghost', name: 'Ghost', seat: 1 }), 'ghost') === 1);
+
+// ---- permissions
+check('spectator move rejected', reduceMove(room, { id: 'carol', pit: 0 }) === undefined);
+check('move on empty room rejected', reduceMove(null, { id: 'alice', pit: 0 }) === undefined);
+check('spectator reset rejected', reduceNewGame(room, { id: 'carol' }) === undefined);
+const solo = reduceClaimSeat(null, { id: 'alice', name: 'A', seat: 0 });
+check('move with one seat filled rejected', reduceMove(solo, { id: 'alice', pit: 0 }) === undefined);
+
+// ---- turn order and sowing
+check('wrong player rejected', reduceMove(room, { id: 'bob', pit: 0 }) === undefined);
+check('empty pit rejected', reduceMove({ ...room, board: [0,4,4,4,4,4,0,4,4,4,4,4,4,0] }, { id: 'alice', pit: 0 }) === undefined);
+check('out of range pit rejected', reduceMove(room, { id: 'alice', pit: 6 }) === undefined);
+check('negative pit rejected', reduceMove(room, { id: 'alice', pit: -1 }) === undefined);
+check('fractional pit rejected', reduceMove(room, { id: 'alice', pit: 1.5 }) === undefined);
+check('string pit rejected', reduceMove(room, { id: 'alice', pit: '2' }) === undefined);
+
+let r = reduceMove(room, { id: 'alice', pit: 2 });     // 4 stones land exactly in the store
+check('sowed correctly', eq(r.board, [4,4,0,5,5,5,1,4,4,4,4,4,4,0]), r.board);
+check('extra turn granted', r.turn === 0 && r.lastMove.extraTurn === true, r);
+check('seats survive a move', bothSeated(r), r.seats);
+
+r = reduceMove(r, { id: 'alice', pit: 0 });
+check('turn passes over', r.turn === 1, r.turn);
+check('second sow correct', eq(r.board, [0,5,1,6,6,5,1,4,4,4,4,4,4,0]), r.board);
+
+r = reduceMove(r, { id: 'bob', pit: 5 });              // index 12, wraps past alice's store
+check("bob reached his own store", r.board[13] === 1, r.board);
+check("bob skipped alice's store", r.board[6] === 1, r.board);
+check("bob wrapped into alice's pits", r.board[0] === 1 && r.board[1] === 6 && r.board[2] === 2, r.board);
+
+// ---- capture, hand-derived
+let cap = reduceClaimSeat(null, { id: 'alice', name: 'A', seat: 0 });
+cap = reduceClaimSeat(cap, { id: 'bob', name: 'B', seat: 1 });
+cap = reduceMove(cap, { id: 'alice', pit: 4 });        // empties her pit 4
+check('capture setup 1', eq(cap.board, [4,4,4,4,0,5,1,5,5,4,4,4,4,0]), cap.board);
+cap = reduceMove(cap, { id: 'bob', pit: 0 });          // five stones stay on his side
+check('capture setup 2', eq(cap.board, [4,4,4,4,0,5,1,0,6,5,5,5,5,0]), cap.board);
+cap = reduceMove(cap, { id: 'alice', pit: 0 });        // lands in her empty pit 4
+check('capture amount', cap.lastMove.captured === 7, cap.lastMove);
+check('capture banked', cap.board[6] === 8, cap.board);
+check('landing pit emptied', cap.board[4] === 0, cap.board);
+check('pit across emptied', cap.board[8] === 0, cap.board);
+check('capture board exact', eq(cap.board, [0,5,5,5,0,5,8,0,0,5,5,5,5,0]), cap.board);
+check('capture ends the turn', cap.turn === 1, cap.turn);
+check('stones conserved after capture', cap.board.reduce((a,b)=>a+b,0) === 48);
+
+// no capture when the pit across is empty
+const noCap = applyMove({ ...newGameState(0), board: [0,0,0,0,1,0,10,0,0,5,5,5,5,17] }, 0, 4);
+check('no capture into an empty opposite pit', noCap.game.lastMove.captured === 0, noCap.game.board);
+
+// ---- a full game
+let g = reduceClaimSeat(null, { id: 'alice', name: 'A', seat: 0 });
+g = reduceClaimSeat(g, { id: 'bob', name: 'B', seat: 1 });
+let guard = 0, sawCapture = false, sawExtra = false;
+while (!g.over && guard < 500) {
+  guard++;
+  const who = g.turn;
+  const opts = [];
+  for (let i = 0; i < 6; i++) if (g.board[who * 7 + i] > 0) opts.push(i);
+  const next = reduceMove(g, { id: who === 0 ? 'alice' : 'bob', pit: opts[guard % opts.length] });
+  if (!next) { check('move accepted mid-game', false, { board: g.board, turn: g.turn }); break; }
+  g = next;
+  if (g.lastMove.captured) sawCapture = true;
+  if (g.lastMove.extraTurn) sawExtra = true;
+}
+check('game reached an end', g.over === true, guard);
+check('captures happened', sawCapture);
+check('extra turns happened', sawExtra);
+check('48 stones conserved', g.board.reduce((a, b) => a + b, 0) === 48, g.board);
+check('pits swept into stores',
+  g.board.slice(0, 6).every((v) => v === 0) && g.board.slice(7, 13).every((v) => v === 0), g.board);
+const expected = g.board[6] === g.board[13] ? 'tie' : (g.board[6] > g.board[13] ? '0' : '1');
+check('winner matches stores', g.winner === expected, [g.winner, g.board[6], g.board[13]]);
+check('turn cleared at end', g.turn === NO_TURN, g.turn);
+check('no moves after the game ends', reduceMove(g, { id: 'alice', pit: 0 }) === undefined);
+check('seats survive to the end', bothSeated(g), g.seats);
+
+// ---- new game
+const restarted = reduceNewGame(g, { id: 'alice' });
+check('new game resets the board', eq(restarted.board, [4,4,4,4,4,4,0,4,4,4,4,4,4,0]), restarted.board);
+check('new game clears the winner', restarted.over === false && restarted.winner === 'none');
+check('new game keeps the seats', bothSeated(restarted), restarted.seats);
+check('new game alternates the opener', restarted.turn === 1, restarted.turn);
+check('games counter advanced', restarted.gamesPlayed === 1, restarted.gamesPlayed);
+check('opener alternates back', reduceNewGame(restarted, { id: 'bob' }).turn === 0);
+
+// ---- normalizeRoom copes with junk
+const junk = normalizeRoom({ board: { 0: 3, 5: 'x' }, turn: 7, winner: 'nope', seats: { '0': { id: 5 }, '1': { id: 'b' } } });
+check('bad board entries become 0', junk.board.length === 14 && junk.board[5] === 0 && junk.board[0] === 3, junk.board);
+check('bad turn becomes NO_TURN', junk.turn === NO_TURN, junk.turn);
+check('bad winner becomes none', junk.winner === 'none', junk.winner);
+check('seat with a non-string id is dropped', !junk.seats['0'] && !!junk.seats['1'], junk.seats);
+check('normalize rejects non-objects', normalizeRoom(null) === null && normalizeRoom('x') === null);
+check('a normalized junk room is still playable',
+  reduceClaimSeat(junk, { id: 'z', name: 'Z', seat: 0 }).seats['0'].id === 'z');
+
+// ---- the sowing route the animation retraces
+const opening = [4,4,4,4,4,4,0,4,4,4,4,4,4,0];
+const route = sowPath(opening, 0, 0);
+check('sowing starts from the pit you picked', route.from === 0, route.from);
+check('one bead per hole, in order', eq(route.drops, [1,2,3,4]), route.drops);
+check('a plain sow captures nothing', route.capture === null, route.capture);
+
+const toStore = sowPath(opening, 0, 2);
+check('sowing can end in your store', eq(toStore.drops, [3,4,5,6]), toStore.drops);
+check('landing in your store is flagged', toStore.extraTurn === true);
+
+const wrapping = sowPath([0,0,0,0,0,12,0,4,4,4,4,4,4,0], 0, 5);
+check('sowing skips the opponent store', !wrapping.drops.includes(13), wrapping.drops);
+check('sowing wraps past their side and back', eq(wrapping.drops, [6,7,8,9,10,11,12,0,1,2,3,4]),
+  wrapping.drops);
+
+const capturing = sowPath([4,4,4,4,0,5,1,0,6,5,5,5,5,0], 0, 0);
+check('the capture is part of the route', !!capturing.capture, capturing.capture);
+check('capture names the pit landed in', capturing.capture.landing === 4, capturing.capture);
+check('capture names the pit across', capturing.capture.across === 8, capturing.capture);
+check('capture names the store to bank into', capturing.capture.store === 6, capturing.capture);
+
+check('an empty pit has no route', sowPath(opening, 0, 6) === null);
+check('an out of range pit has no route', sowPath(opening, 0, 9) === null);
+check('a route drops exactly as many beads as the pit held',
+  sowPath(opening, 1, 3).drops.length === 4);
+check('the route agrees with the rules',
+  eq(reduceMove(reduceClaimSeat(reduceClaimSeat(null, { id: 'a', name: 'a', seat: 0 }),
+    { id: 'b', name: 'b', seat: 1 }), { id: 'a', pit: 0 }).board,
+    (() => { const b = opening.slice(); b[0] = 0; for (const i of route.drops) b[i]++; return b; })()));
+
+// ---- the two passwords
+// Kept out of the repo: pass them in as ?p1=…&p2=… to run these.
+const params = new URLSearchParams(location.search);
+const pw1 = params.get('p1');
+const pw2 = params.get('p2');
+
+if (!pw1 || !pw2) {
+  lines.push('  --   password checks skipped (pass ?p1=…&p2=… to run them)');
+} else {
+  const p1 = await identify(pw1);
+  const p2 = await identify(pw2);
+  check('the first password is player 1', p1 && p1.player === 0, p1 && p1.player);
+  check('the second password is player 2', p2 && p2.player === 1, p2 && p2.player);
+  check('both passwords open the same room', p1 && p2 && p1.roomKey === p2.roomKey);
+  check('the room key is 32 hex chars', p1 && /^[0-9a-f]{32}$/.test(p1.roomKey), p1 && p1.roomKey);
+  check('both passwords derive a photo key', !!(p1.mediaKey && p2.mediaKey));
+  check('identify is stable', (await identify(pw1)).roomKey === p1.roomKey);
+  check('a wrong password is refused', (await identify(pw1 + 'x')) === null);
+  check('case matters', (await identify(pw1.toUpperCase())) === null);
+  check('whitespace matters', (await identify(' ' + pw1)) === null);
+  check('the room key is not the password', p1.roomKey !== pw1);
+  check('the source does not contain the room key',
+    !(await (await fetch('game.js')).text()).includes(p1.roomKey));
+  check('the source does not contain either password', !(await (await fetch('game.js')).text()).includes(pw1));
+
+  // the win photos must be unreadable without the password
+  const raw = new Uint8Array(await (await fetch('katewin.enc')).arrayBuffer());
+  check('the photo ships encrypted', !(raw[0] === 0xff && raw[1] === 0xd8), [raw[0], raw[1]]);
+  const url = await decryptPhoto('katewin.enc', p1.mediaKey);
+  const out = new Uint8Array(await (await fetch(url)).arrayBuffer());
+  check('the password decrypts it back to a JPEG', out[0] === 0xff && out[1] === 0xd8, [out[0], out[1]]);
+  check('the decrypted photo is a sensible size', out.length > 100000, out.length);
+}
+
+check('an empty password is refused', (await identify('')) === null);
+check('a non-string password is refused', (await identify(null)) === null);
+
+lines.push(fails === 0 ? '\nALL PASS (' + (lines.length) + ' checks)' : '\n' + fails + ' FAILURES');
+document.getElementById('out').textContent = lines.join('\n');
+</script>

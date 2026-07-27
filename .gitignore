@@ -1,0 +1,11 @@
+# Never commit the plaintext win photos — they ship as .enc ciphertext, and
+# setup-secrets.py is what turns one into the other.
+*.jpg
+*.jpeg
+*.png
+
+# scratch files from the test harness
+_*
+
+# the cat lines in the clear — encrypted into catlines.enc
+cat-lines.txt
