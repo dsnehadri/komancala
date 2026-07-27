@@ -306,8 +306,10 @@ function escape(text) {
   return d.innerHTML;
 }
 
-// Hotlinked from Giphy, which is what Giphy is for. If one ever 404s the
-// handler below drops it rather than leaving a broken-image icon on the page.
+// Hotlinked from Giphy, which is what Giphy is for. A mix of real cats and
+// cartoon ones; each was checked at the size it actually renders. If one ever
+// 404s, the error handler swaps in the next rather than leaving a broken
+// image on the page.
 const CAT_GIFS = [
   'https://media.giphy.com/media/TjSPQgowhhJdHgvnwA/giphy.gif',
   'https://media.giphy.com/media/GR0CVcTdcfQjeJ4jYW/giphy.gif',
@@ -316,6 +318,36 @@ const CAT_GIFS = [
   'https://media.giphy.com/media/omHLPPV87OJCEn0lGu/giphy.gif',
   'https://media.giphy.com/media/bUGnyabq6EHtD8TTyV/giphy.gif',
   'https://media.giphy.com/media/ZlHG4gSXeFpur3Rzvu/giphy.gif',
+  'https://media.giphy.com/media/8pYMOn1sEb43EloTf8/giphy.gif',
+  'https://media.giphy.com/media/3UkqVq3F50bVCi9URl/giphy.gif',
+  'https://media.giphy.com/media/OwFsPO2tCcrSYxDErS/giphy.gif',
+  'https://media.giphy.com/media/IAbrtESCyrqLOMlWdx/giphy.gif',
+  'https://media.giphy.com/media/VSLIjK1WyV3GbT5m9G/giphy.gif',
+  'https://media.giphy.com/media/scpcMQTvUkA7STaA27/giphy.gif',
+  'https://media.giphy.com/media/j93ycvEyWlSIIg8AEl/giphy.gif',
+  'https://media.giphy.com/media/tphCApwvdtC1VJabZ1/giphy.gif',
+  'https://media.giphy.com/media/cW64pEEZe0YZa/giphy.gif',
+  'https://media.giphy.com/media/OTcLMgMdx1ACCuy11E/giphy.gif',
+  'https://media.giphy.com/media/9n0CvokbUMaWhFuCkp/giphy.gif',
+  'https://media.giphy.com/media/VXS7y6lz5ZEI0W7ZOB/giphy.gif',
+  'https://media.giphy.com/media/4mAvdIOErglBOag7Qo/giphy.gif',
+  'https://media.giphy.com/media/T7jYi3VXmhsOY/giphy.gif',
+  'https://media.giphy.com/media/Tvd56JByYXKMyipX2h/giphy.gif',
+  'https://media.giphy.com/media/lQyBm0PDRIGHgXyFtx/giphy.gif',
+  'https://media.giphy.com/media/2raTcMjNC82sRvDk4f/giphy.gif',
+  'https://media.giphy.com/media/3ohs7HqwyUscSwZz4A/giphy.gif',
+  'https://media.giphy.com/media/UVUslMrgTNHaVu2tOI/giphy.gif',
+  'https://media.giphy.com/media/8CoGnT9WNfTUlEWB3j/giphy.gif',
+  'https://media.giphy.com/media/FhJHUMWU5BslKdvtSC/giphy.gif',
+  'https://media.giphy.com/media/qqBRgmarYUfYs/giphy.gif',
+  'https://media.giphy.com/media/Sos2kKKBJF7XO/giphy.gif',
+  'https://media.giphy.com/media/uCl6VMYjzmRl8raz98/giphy.gif',
+  'https://media.giphy.com/media/A4X3oXPlGJAzu/giphy.gif',
+  'https://media.giphy.com/media/E7FMGUqi8ih5CPBSXm/giphy.gif',
+  'https://media.giphy.com/media/P5K1aynBiJWg14coAY/giphy.gif',
+  'https://media.giphy.com/media/lsM0MSTfguTkeeeLB8/giphy.gif',
+  'https://media.giphy.com/media/KiTqoWPWblxeN3a2Hf/giphy.gif',
+  'https://media.giphy.com/media/6r5EbCaGFFcC0gWEjE/giphy.gif',
 ];
 
 let catCursor = Math.floor(Math.random() * CAT_GIFS.length);
