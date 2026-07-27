@@ -392,8 +392,11 @@ function speak() {
   cat.bubble.textContent = line;
   cat.bubble.classList.remove('hidden');
 
+  // Long enough to read at a glance, and longer still for the long ones —
+  // the wall-of-text lines need a while before they mean anything.
+  const showFor = Math.min(22000, 6500 + line.length * 60);
   clearTimeout(bubbleTimer);
-  bubbleTimer = setTimeout(() => cat.bubble.classList.add('hidden'), 5200);
+  bubbleTimer = setTimeout(() => cat.bubble.classList.add('hidden'), showFor);
 }
 
 let movesSinceLine = 0;
