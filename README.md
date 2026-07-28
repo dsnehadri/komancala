@@ -64,6 +64,12 @@ Moves are sown rather than snapped: the pile is lifted out of the hole you
 picked and dropped one bead at a time round the board, and the board is locked
 until the last one lands.
 
+Openings are dealt at random rather than four to a pit, but sensibly: both
+sides always get the same shape, so it is random and still fair; the total is
+the usual 48; and every pit holds between two and six, so no game starts with
+one hole hoarding and the rest bare. Bounds live in `randomBoard` in
+[game.js](game.js).
+
 To change the passwords, run:
 
 ```bash

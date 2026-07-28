@@ -6,7 +6,7 @@
 import {
   initialRoom, newGameState, applyMove, seatOf, bothSeated, normalizeRoom,
   reduceClaimSeat, reduceMove, reduceNewGame, NO_TURN, identify, decryptPhoto, sowPath,
-  reduceKickSeats, makeLineBag,
+  reduceKickSeats, makeLineBag, randomBoard,
 } from './game.js';
 
 const lines = [];
@@ -22,6 +22,49 @@ const fresh = initialRoom();
 check('board starts with 4s', eq(fresh.board, [4,4,4,4,4,4,0,4,4,4,4,4,4,0]), fresh.board);
 check('player 0 opens', fresh.turn === 0);
 check('no seats yet', !bothSeated(fresh));
+
+// ---- random openings
+const openings = Array.from({ length: 300 }, () => randomBoard());
+check('a random opening still holds 48 beads',
+  openings.every((b) => b.reduce((x, y) => x + y, 0) === 48),
+  openings.find((b) => b.reduce((x, y) => x + y, 0) !== 48));
+check('both stores start empty',
+  openings.every((b) => b[6] === 0 && b[13] === 0));
+check('both sides get the same shape, so it is fair',
+  openings.every((b) => b.slice(0, 6).join() === b.slice(7, 13).join()),
+  openings.find((b) => b.slice(0, 6).join() !== b.slice(7, 13).join()));
+check('no pit starts empty',
+  openings.every((b) => b.slice(0, 6).every((n) => n >= 2)),
+  openings.find((b) => b.slice(0, 6).some((n) => n < 2)));
+check('no pit starts hoarding',
+  openings.every((b) => b.slice(0, 6).every((n) => n <= 6)),
+  openings.find((b) => b.slice(0, 6).some((n) => n > 6)));
+check('the opening actually varies',
+  new Set(openings.map((b) => b.join())).size > 20,
+  new Set(openings.map((b) => b.join())).size);
+check('sometimes it differs from the standard four each',
+  openings.some((b) => b.slice(0, 6).join() !== '4,4,4,4,4,4'));
+
+// a fixed sequence of "random" numbers must give a fixed board
+const fixed = () => { let i = 0; const seq = [0.1, 0.9, 0.3, 0.7, 0.5, 0.2]; return () => seq[i++ % seq.length]; };
+check('it is deterministic given the same rolls',
+  randomBoard(fixed()).join() === randomBoard(fixed()).join(), randomBoard(fixed()));
+
+// the openings have to flow through the reducers, since Firebase re-runs those
+const dealt = randomBoard();
+const freshRoom = reduceClaimSeat(null, { id: 'a', name: 'A', seat: 0, board: dealt });
+check('a new room can be opened with a dealt board', freshRoom.board.join() === dealt.join(), freshRoom.board);
+check('without one it falls back to four each',
+  reduceClaimSeat(null, { id: 'a', name: 'A', seat: 0 }).board.join() === '4,4,4,4,4,4,0,4,4,4,4,4,4,0');
+
+const seatedPair = reduceClaimSeat(reduceClaimSeat(null, { id: 'a', name: 'A', seat: 0 }),
+  { id: 'b', name: 'B', seat: 1 });
+const dealt2 = randomBoard();
+const restarted2 = reduceNewGame(seatedPair, { id: 'a', board: dealt2 });
+check('a new game uses the board it was handed', restarted2.board.join() === dealt2.join(), restarted2.board);
+check('a new game keeps both players seated', bothSeated(restarted2), restarted2.seats);
+check('a random opening is playable',
+  reduceMove(restarted2.turn === 0 ? restarted2 : { ...restarted2, turn: 0 }, { id: 'a', pit: 0 }) !== undefined);
 
 // ---- seating: your password owns a specific chair
 let room = reduceClaimSeat(null, { id: 'alice', name: 'Alice', seat: 0 });

@@ -22,9 +22,40 @@ export function newBoard() {
   return board;
 }
 
-export function newGameState(startingPlayer = 0) {
+// A random opening that still looks like mancala. Both sides get the same
+// shape, so it is random but fair — you and your opponent face the identical
+// puzzle. The total stays at the usual 48 and every pit holds between MIN and
+// MAX, so no game opens with one hole holding a dozen beads and the rest bare.
+//
+// Done by shuffling beads between pits rather than dealing them out: a random
+// walk that preserves the total and cannot leave the bounds by construction.
+const MIN_PER_PIT = 2;
+const MAX_PER_PIT = 6;
+
+export function randomBoard(random = Math.random) {
+  const side = new Array(PITS).fill(STONES_PER_PIT);
+  const pick = () => Math.floor(random() * PITS);
+
+  for (let shuffles = 0; shuffles < 60; shuffles++) {
+    const from = pick();
+    const to = pick();
+    if (from === to) continue;
+    if (side[from] <= MIN_PER_PIT || side[to] >= MAX_PER_PIT) continue;
+    side[from]--;
+    side[to]++;
+  }
+
+  const board = new Array(14).fill(0);
+  for (let i = 0; i < PITS; i++) {
+    board[i] = side[i];
+    board[i + 7] = side[i];
+  }
+  return board;
+}
+
+export function newGameState(startingPlayer = 0, board = newBoard()) {
   return {
-    board: newBoard(),
+    board,
     turn: startingPlayer,
     over: false,
     winner: 'none',                  // 'none' | '0' | '1' | 'tie'
@@ -32,8 +63,8 @@ export function newGameState(startingPlayer = 0) {
   };
 }
 
-export function initialRoom() {
-  return { ...newGameState(0), seats: {}, gamesPlayed: 0 };
+export function initialRoom(board) {
+  return { ...newGameState(0, board || newBoard()), seats: {}, gamesPlayed: 0 };
 }
 
 // Firebase hands back arrays as arrays, objects with missing keys, and numbers
@@ -194,8 +225,8 @@ export function sowPath(board, player, pit) {
 // re-runs these against fresh data whenever two people write at once, so they
 // have to re-check every precondition against the state they are handed.
 
-export function reduceClaimSeat(state, { id, name, seat, force = false }) {
-  const room = state ? normalizeRoom(state) : initialRoom();
+export function reduceClaimSeat(state, { id, name, seat, force = false, board }) {
+  const room = state ? normalizeRoom(state) : initialRoom(board);
   if (seat !== 0 && seat !== 1) return room;
 
   const key = String(seat);
@@ -239,12 +270,15 @@ export function reduceMove(state, { id, pit }) {
   return { ...room, ...result.game };
 }
 
-export function reduceNewGame(state, { id }) {
+export function reduceNewGame(state, { id, board }) {
   if (!state) return undefined;
   const room = normalizeRoom(state);
   if (seatOf(room, id) === null) return undefined;  // spectators cannot reset
   const gamesPlayed = room.gamesPlayed + 1;
-  return { ...room, ...newGameState(gamesPlayed % 2), gamesPlayed };
+  // The caller supplies the opening so this stays a pure function — Firebase
+  // re-runs it on contention, and a board that changed between retries would
+  // mean the two players briefly disagreed about where the beads were.
+  return { ...room, ...newGameState(gamesPlayed % 2, board || newBoard()), gamesPlayed };
 }
 
 const toHex = (buffer) => Array.from(new Uint8Array(buffer))

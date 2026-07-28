@@ -10,7 +10,7 @@ import {
 import { firebaseConfig } from './firebase-config.js';
 import {
   normalizeRoom, seatOf, bothSeated, identify, decryptPhoto, decryptLines, sowPath, makeLineBag,
-  reduceClaimSeat, reduceMove, reduceNewGame, reduceKickSeats, NO_TURN,
+  reduceClaimSeat, reduceMove, reduceNewGame, reduceKickSeats, randomBoard, NO_TURN,
 } from './game.js';
 
 const KEY_PW = 'komancala.password';
@@ -655,8 +655,11 @@ async function onPitClick(index) {
 }
 
 async function claimSeat(force = false) {
+  // Rolled once per attempt, not per retry, so a contended transaction can't
+  // hand the two players different openings.
+  const opening = randomBoard();
   const result = await runTransaction(roomRef, (state) =>
-    reduceClaimSeat(state, { id: playerId, name: playerName, seat: assignedSeat, force }));
+    reduceClaimSeat(state, { id: playerId, name: playerName, seat: assignedSeat, force, board: opening }));
 
   const committed = normalizeRoom(result.snapshot.val());
   const mine = seatOf(committed, playerId);
@@ -804,7 +807,9 @@ for (const id of ['pw', 'name']) {
 $('newgame').addEventListener('click', async () => {
   gameError.textContent = '';
   try {
-    const result = await runTransaction(roomRef, (state) => reduceNewGame(state, { id: playerId }));
+    const opening = randomBoard();
+    const result = await runTransaction(roomRef, (state) =>
+      reduceNewGame(state, { id: playerId, board: opening }));
     if (!result.committed) gameError.textContent = 'Only the two players can start a new game.';
   } catch (err) {
     gameError.textContent = describe(err);
