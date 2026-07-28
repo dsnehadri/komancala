@@ -237,7 +237,8 @@ function render() {
   shownBoard = board.slice();
 
   if (sawNewMove) moveLanded();
-  if (room.over) showCats(4);
+  // One cat while you play; the whole gang turns out for a result.
+  showCats(room.over ? 4 : 1);
 
   if (room.over && room.winner !== 'tie') showWinPhoto(WIN_SCREENS[Number(room.winner)]);
   else hideWinPhoto();
@@ -483,8 +484,11 @@ function nextCat() {
   }
 }
 
+// Sets the number of cats on screen, both up and down. It only ever counted up
+// before, so the four that turn up for a win stayed for every game after it.
 function showCats(count) {
   while (bouncers.length < count) spawnCat();
+  while (bouncers.length > count) bouncers.pop().el.remove();
 }
 
 function clearCats() {
