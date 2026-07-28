@@ -47,11 +47,34 @@ dropped = reduceClaimSeat(dropped, { id: 'alice', name: 'Alice', seat: 0 });
 check('reconnect returns you to your own seat', seatOf(dropped, 'alice') === 0, dropped.seats);
 check('reconnect leaves the other player alone', seatOf(dropped, 'bob') === 1, dropped.seats);
 
-// a stale session of yours sitting in your chair under a different id
-let stale = { ...room, seats: { '0': { id: 'alice-old-tab', name: 'Alice' }, '1': room.seats['1'] } };
-stale = reduceClaimSeat(stale, { id: 'alice', name: 'Alice', seat: 0 });
-check('you take your chair back from your own stale session',
-  seatOf(stale, 'alice') === 0 && seatOf(stale, 'alice-old-tab') === null, stale.seats);
+// another session in your chair — a dead tab of yours, or your phone. Taking it
+// automatically is what made two clients on one password fight forever.
+const occupied = { ...room, seats: { '0': { id: 'alice-old-tab', name: 'Alice' }, '1': room.seats['1'] } };
+check('an occupied chair is not taken automatically',
+  reduceClaimSeat(occupied, { id: 'alice', name: 'Alice', seat: 0 }) === undefined);
+const forced = reduceClaimSeat(occupied, { id: 'alice', name: 'Alice', seat: 0, force: true });
+check('but you can take it deliberately', seatOf(forced, 'alice') === 0, forced.seats);
+check('taking it evicts the other session', seatOf(forced, 'alice-old-tab') === null, forced.seats);
+check('taking it leaves the other player alone', seatOf(forced, 'bob') === 1, forced.seats);
+
+// two clients on one password must settle instead of evicting each other
+let shared = reduceClaimSeat(null, { id: 'phone', name: 'Sne', seat: 0 });
+let writes = 0;
+for (let tick = 0; tick < 20; tick++) {
+  for (const me of ['phone', 'laptop']) {
+    if (seatOf(shared, me) === null) {
+      const next = reduceClaimSeat(shared, { id: me, name: 'Sne', seat: 0 });
+      if (next !== undefined) { shared = next; writes++; }
+    }
+  }
+}
+check('two clients sharing a password stop fighting', writes === 0, writes);
+check('the first one keeps the seat', seatOf(shared, 'phone') === 0, shared.seats);
+
+// an empty chair is still retaken without asking — this is what the kick relies on
+const emptied = { ...room, seats: { '1': room.seats['1'] } };
+check('an empty chair is retaken automatically',
+  seatOf(reduceClaimSeat(emptied, { id: 'alice', name: 'Alice', seat: 0 }), 'alice') === 0);
 
 // and if you somehow ended up in the wrong chair, you leave it
 let wrongChair = { seats: { '1': { id: 'alice', name: 'Alice' } }, ...newGameState(0), gamesPlayed: 0 };
@@ -77,6 +100,7 @@ check('kicking without a seat is refused',
 // the kicked player's live client just sits back down
 check('a live player retakes their seat after a kick',
   seatOf(reduceClaimSeat(kicked, { id: 'ghost', name: 'Ghost', seat: 1 }), 'ghost') === 1);
+check('kicking still empties the chair it needs to', !kicked.seats['1'], kicked.seats);
 
 // ---- permissions
 check('spectator move rejected', reduceMove(room, { id: 'carol', pit: 0 }) === undefined);

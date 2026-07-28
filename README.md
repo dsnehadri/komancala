@@ -146,7 +146,12 @@ Without them those checks are skipped, so the passwords stay out of the repo.
 - [database.rules.json](database.rules.json) — what to paste into the Rules tab.
 
 Seats are released automatically when a player's connection drops, and taken
-back when they reconnect, so a closed tab can't lock the other person out. If a
+back when they reconnect, so a closed tab can't lock the other person out.
+
+Open the same password twice — your laptop and your phone, say — and the second
+one doesn't fight the first for the seat. It says so and offers **TAKE MY
+SEAT**, which hands it over deliberately. An empty chair is still retaken
+without asking; it is only an occupied one that waits for you. If a
 seat gets stuck anyway — a dead tab the disconnect handler never noticed —
 **KICK EVERYONE** clears both chairs. Anyone still actually there sits straight
 back down within a second, because their password owns their chair; a stale

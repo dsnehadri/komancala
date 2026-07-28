@@ -194,14 +194,22 @@ export function sowPath(board, player, pit) {
 // re-runs these against fresh data whenever two people write at once, so they
 // have to re-check every precondition against the state they are handed.
 
-export function reduceClaimSeat(state, { id, name, seat }) {
+export function reduceClaimSeat(state, { id, name, seat, force = false }) {
   const room = state ? normalizeRoom(state) : initialRoom();
   if (seat !== 0 && seat !== 1) return room;
 
-  // Your password owns your seat, so take it back unconditionally — the only
-  // thing that can be sitting in it is a stale session of your own.
+  const key = String(seat);
+  const sitting = room.seats[key];
+
+  // Somebody else's session is in your chair. From here a dead tab of yours and
+  // a live session on your other device look identical, so taking it back is a
+  // decision for a human: two clients sharing a password would otherwise evict
+  // each other forever, at network speed. Aborting means no write at all, which
+  // is what actually breaks the loop.
+  if (sitting && sitting.id !== id && !force) return undefined;
+
   const seats = { ...room.seats };
-  seats[String(seat)] = { id, name: name || `Player ${seat + 1}` };
+  seats[key] = { id, name: name || `Player ${seat + 1}` };
 
   // And if a previous session of yours is in the other chair, get out of it.
   const other = String(1 - seat);

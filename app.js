@@ -654,9 +654,9 @@ async function onPitClick(index) {
   }
 }
 
-async function claimSeat() {
+async function claimSeat(force = false) {
   const result = await runTransaction(roomRef, (state) =>
-    reduceClaimSeat(state, { id: playerId, name: playerName, seat: assignedSeat }));
+    reduceClaimSeat(state, { id: playerId, name: playerName, seat: assignedSeat, force }));
 
   const committed = normalizeRoom(result.snapshot.val());
   const mine = seatOf(committed, playerId);
@@ -733,13 +733,17 @@ function watchRoom() {
     seat = seatOf(room, playerId);
     gameError.textContent = '';
 
-    // Your password owns your chair. If you are somehow not in it — kicked, or
-    // dropped — sit back down. A stale entry can't do this, which is what makes
-    // the kick button work.
-    if (seat === null && assignedSeat !== null) {
+    // Your password owns your chair, so if it is standing empty — you were
+    // kicked, or dropped — sit back down. But if another session is sitting in
+    // it, say so and wait: grabbing it automatically is how two clients on one
+    // password end up evicting each other forever.
+    const myChair = assignedSeat === null ? null : room.seats[String(assignedSeat)];
+    if (seat === null && assignedSeat !== null && !myChair) {
+      showDisplaced(false);
       claimSeat().catch(() => {});
       return;
     }
+    showDisplaced(seat === null && assignedSeat !== null && !!myChair);
 
     if (worthAnimating) {
       renderedMove = moveKeyOf(next);
@@ -773,6 +777,17 @@ function watchConnection() {
   });
 }
 
+// Shown when another session holds your chair — your own phone, usually.
+function showDisplaced(displaced) {
+  $('takeseat').classList.toggle('hidden', !displaced);
+  if (displaced) {
+    bannerEl.textContent = 'Your password is open somewhere else — that session has the seat.';
+    bannerEl.classList.remove('hidden');
+  } else if (bannerEl.textContent.startsWith('Your password is open')) {
+    bannerEl.classList.add('hidden');
+  }
+}
+
 function describe(err) {
   const message = String(err && err.message ? err.message : err);
   if (message.toLowerCase().includes('permission_denied')) {
@@ -791,6 +806,15 @@ $('newgame').addEventListener('click', async () => {
   try {
     const result = await runTransaction(roomRef, (state) => reduceNewGame(state, { id: playerId }));
     if (!result.committed) gameError.textContent = 'Only the two players can start a new game.';
+  } catch (err) {
+    gameError.textContent = describe(err);
+  }
+});
+
+$('takeseat').addEventListener('click', async () => {
+  gameError.textContent = '';
+  try {
+    await claimSeat(true);          // deliberate handoff, so force it
   } catch (err) {
     gameError.textContent = describe(err);
   }
