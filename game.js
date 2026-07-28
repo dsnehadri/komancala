@@ -317,6 +317,31 @@ export async function identify(password) {
 }
 
 
+// Deals every line once, in a random order, before any of them repeats — a
+// shuffled deck rather than a dice roll. Pure random means some lines turn up
+// three times a game while others never appear at all.
+//
+// `next(avoid)` won't open a fresh deck with the line you just heard, so the
+// no-repeats rule holds across the seam too.
+export function makeLineBag(lines) {
+  let bag = [];
+  return function next(avoid) {
+    if (!lines.length) return null;
+    if (!bag.length) {
+      bag = lines.slice();
+      for (let i = bag.length - 1; i > 0; i--) {      // Fisher-Yates
+        const j = Math.floor(Math.random() * (i + 1));
+        [bag[i], bag[j]] = [bag[j], bag[i]];
+      }
+      // bag.pop() takes from the end, so that is the one to move out of the way
+      if (bag.length > 1 && bag[bag.length - 1] === avoid) {
+        [bag[bag.length - 1], bag[0]] = [bag[0], bag[bag.length - 1]];
+      }
+    }
+    return bag.pop();
+  };
+}
+
 // Encrypted assets — the win photos and the cat's lines — are fetched, have
 // their 16-byte IV peeled off, and are decrypted with the key the password
 // derived. None of it is readable in the repo.

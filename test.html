@@ -6,7 +6,7 @@
 import {
   initialRoom, newGameState, applyMove, seatOf, bothSeated, normalizeRoom,
   reduceClaimSeat, reduceMove, reduceNewGame, NO_TURN, identify, decryptPhoto, sowPath,
-  reduceKickSeats,
+  reduceKickSeats, makeLineBag,
 } from './game.js';
 
 const lines = [];
@@ -203,6 +203,40 @@ check('the route agrees with the rules',
   eq(reduceMove(reduceClaimSeat(reduceClaimSeat(null, { id: 'a', name: 'a', seat: 0 }),
     { id: 'b', name: 'b', seat: 1 }), { id: 'a', pit: 0 }).board,
     (() => { const b = opening.slice(); b[0] = 0; for (const i of route.drops) b[i]++; return b; })()));
+
+// ---- the cat deals its lines from a shuffled deck, not a dice roll
+const deck = ['a', 'b', 'c', 'd', 'e'];
+const draw = makeLineBag(deck);
+const firstCycle = [draw(), draw(), draw(), draw(), draw()];
+check('a full cycle deals every line', eq([...firstCycle].sort(), [...deck].sort()), firstCycle);
+check('a full cycle repeats nothing', new Set(firstCycle).size === deck.length, firstCycle);
+
+const secondCycle = [draw(), draw(), draw(), draw(), draw()];
+check('the next cycle deals every line again', eq([...secondCycle].sort(), [...deck].sort()), secondCycle);
+check('no repeat across the seam', firstCycle[4] !== secondCycle[0], [firstCycle[4], secondCycle[0]]);
+
+// over many cycles, every line should come up the same number of times
+const tally = {};
+const long = makeLineBag(deck);
+for (let i = 0; i < deck.length * 40; i++) {
+  const line = long();
+  tally[line] = (tally[line] || 0) + 1;
+}
+check('every line comes up equally often', Object.values(tally).every((n) => n === 40), tally);
+check('nothing outside the deck is dealt',
+  Object.keys(tally).every((line) => deck.includes(line)), Object.keys(tally));
+
+// it should actually shuffle — twenty decks in identical order would be absurd
+const orders = new Set();
+for (let i = 0; i < 20; i++) {
+  const d = makeLineBag(deck);
+  orders.add([d(), d(), d(), d(), d()].join(''));
+}
+check('the order is shuffled between cycles', orders.size > 1, orders.size);
+
+check('an empty list deals nothing', makeLineBag([])() === null);
+const single = makeLineBag(['only']);
+check('a one-line list still deals it', single() === 'only' && single() === 'only');
 
 // ---- the two passwords
 // Kept out of the repo: pass them in as ?p1=…&p2=… to run these.

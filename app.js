@@ -9,7 +9,7 @@ import {
 
 import { firebaseConfig } from './firebase-config.js';
 import {
-  normalizeRoom, seatOf, bothSeated, identify, decryptPhoto, decryptLines, sowPath,
+  normalizeRoom, seatOf, bothSeated, identify, decryptPhoto, decryptLines, sowPath, makeLineBag,
   reduceClaimSeat, reduceMove, reduceNewGame, reduceKickSeats, NO_TURN,
 } from './game.js';
 
@@ -357,6 +357,7 @@ let catCursor = Math.floor(Math.random() * CAT_GIFS.length);
 // the material isn't. Edit cat-lines.txt and run encrypt-lines.py to change
 // them. Empty until that fetch lands.
 let catLines = [];
+let nextLine = makeLineBag([]);
 
 async function loadCatLines(mediaKey) {
   try {
@@ -364,18 +365,22 @@ async function loadCatLines(mediaKey) {
   } catch {
     catLines = [];        // the cat just sticks to the weekday line
   }
+  nextLine = makeLineBag(catLines.length ? [...catLines, WEEKDAY_TOKEN] : []);
 }
 
 const WEEKDAYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
 
+// The weekday line is generated rather than stored, so it goes into the deck as
+// a token and is rendered when it comes up. That way it is dealt exactly once
+// per cycle, the same as every written line, and it is still what the cat falls
+// back on if the encrypted lines never arrive.
+const WEEKDAY_TOKEN = '\u0000weekday';
+const weekdayLine = () => `it's mancala ${WEEKDAYS[new Date().getDay()]}`;
+
 function catLine() {
-  // The weekday one is funnier for being true, so it comes up a little more —
-  // and it is generated here, so the cat has something to say even if the
-  // encrypted lines never arrive.
-  if (!catLines.length || Math.random() < 0.12) {
-    return `it's mancala ${WEEKDAYS[new Date().getDay()]}`;
-  }
-  return catLines[Math.floor(Math.random() * catLines.length)];
+  if (!catLines.length) return weekdayLine();
+  const drawn = nextLine(lastLine);
+  return drawn === WEEKDAY_TOKEN ? weekdayLine() : drawn;
 }
 
 let lastLine = '';
@@ -384,8 +389,8 @@ let bubbleTimer = null;
 function speak() {
   if (!bouncers.length) return;
   const cat = bouncers[Math.floor(Math.random() * bouncers.length)];
-  let line = catLine();
-  for (let tries = 0; line === lastLine && tries < 4; tries++) line = catLine();
+  // The deck guarantees no repeats, including across a reshuffle.
+  const line = catLine();
   lastLine = line;
 
   for (const other of bouncers) other.bubble.classList.add('hidden');
