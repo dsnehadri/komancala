@@ -64,6 +64,11 @@ Moves are sown rather than snapped: the pile is lifted out of the hole you
 picked and dropped one bead at a time round the board, and the board is locked
 until the last one lands.
 
+If player 1 banks more than ten stones in a single turn, `bigscore.png` fades
+up over the board for a couple of seconds and fades away. The threshold is
+`BIG_HAUL` in [app.js](app.js), and any of bigscore.gif/png/jpg/webp will do —
+with no such file the effect simply never fires.
+
 Openings are dealt at random rather than four to a pit, but sensibly: both
 sides always get the same shape, so it is random and still fair; the total is
 the usual 48; and every pit holds between two and six, so no game starts with
