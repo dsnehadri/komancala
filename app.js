@@ -9,8 +9,9 @@ import {
 
 import { firebaseConfig } from './firebase-config.js';
 import {
-  normalizeRoom, seatOf, bothSeated, identify, decryptPhoto, decryptLines, sowPath, makeLineBag,
-  reduceClaimSeat, reduceMove, reduceNewGame, reduceKickSeats, randomBoard, NO_TURN,
+  normalizeRoom, seatOf, bothSeated, seatPresent, identify, decryptPhoto, decryptLines,
+  sowPath, makeLineBag, reduceClaimSeat, reduceMove, reduceNewGame, reduceKickSeats,
+  randomBoard, NO_TURN,
 } from './game.js';
 
 const KEY_PW = 'komancala.password';
@@ -43,6 +44,7 @@ let playerName = localStorage.getItem(KEY_NAME) || '';
 let db = null;
 let roomRef = null;
 let seatRef = null;
+let presenceRef = null;
 let disconnectHandle = null;
 let unsubscribeRoom = null;
 let unsubscribeConn = null;
@@ -285,19 +287,24 @@ function statusText({ myTurn, seated }) {
     return `<strong>Watching</strong><span class="sub">Both seats are taken. You'll get one if somebody leaves.</span>`;
   }
   if (!seated) {
-    return `<strong>Waiting for your friend</strong><span class="sub">Send them this link and the password.</span>`;
+    return `<strong>Waiting for your friend</strong><span class="sub">Send them this link and their password.</span>`;
   }
   if (myTurn) {
     const bonus = last.player === seat && last.extraTurn
       ? ' Free turn — you landed in your store.'
       : '';
+    // Deliberately says nothing about whether they are online: you can move
+    // either way, and saying so would only make people wait for no reason.
     return `<strong>Your turn</strong><span class="sub">Pick a pit on your side.${bonus}</span>`;
   }
   const captured = last.player === seat && last.captured
     ? ` You captured ${last.captured}.`
     : '';
   const whose = them && them.name ? `${escape(them.name)}'s turn` : 'Their turn';
-  return `<strong>${whose}</strong><span class="sub">Hang tight.${captured}</span>`;
+  const away = seat !== null && !seatPresent(room, 1 - seat)
+    ? ' They are away — it will be here when they look.'
+    : ' Hang tight.';
+  return `<strong>${whose}</strong><span class="sub">${away}${captured}</span>`;
 }
 
 // Names come from the other player, so they go through the DOM as text.
@@ -668,15 +675,20 @@ async function claimSeat(force = false) {
   const committed = normalizeRoom(result.snapshot.val());
   const mine = seatOf(committed, playerId);
 
-  // Hand the seat back to the server if this tab goes away, so a closed laptop
-  // doesn't hold a chair forever.
+  // Mark yourself online, and have the server mark you offline the moment this
+  // page goes away. The chair itself stays yours: your friend has to be able to
+  // move while your phone is in your pocket.
   if (disconnectHandle) { disconnectHandle.cancel().catch(() => {}); disconnectHandle = null; }
   if (mine !== null) {
     seatRef = ref(db, `games/${roomRef.key}/seats/${mine}`);
-    disconnectHandle = onDisconnect(seatRef);
+    // The claim itself recorded that you are online, so there is nothing to
+    // write here — only the standing instruction to clear it when you vanish.
+    presenceRef = ref(db, `games/${roomRef.key}/presence/${mine}`);
+    disconnectHandle = onDisconnect(presenceRef);
     disconnectHandle.remove().catch(() => {});
   } else {
     seatRef = null;
+    presenceRef = null;
   }
   return mine;
 }
@@ -744,13 +756,15 @@ function watchRoom() {
     // kicked, or dropped — sit back down. But if another session is sitting in
     // it, say so and wait: grabbing it automatically is how two clients on one
     // password end up evicting each other forever.
-    const myChair = assignedSeat === null ? null : room.seats[String(assignedSeat)];
-    if (seat === null && assignedSeat !== null && !myChair) {
+    const chairTaken = seat === null && assignedSeat !== null
+      && !!room.seats[String(assignedSeat)];
+    const takenByLiveSession = chairTaken && seatPresent(room, assignedSeat);
+    if (seat === null && assignedSeat !== null && !takenByLiveSession) {
       showDisplaced(false);
       claimSeat().catch(() => {});
       return;
     }
-    showDisplaced(seat === null && assignedSeat !== null && !!myChair);
+    showDisplaced(takenByLiveSession);
 
     if (worthAnimating) {
       renderedMove = moveKeyOf(next);
@@ -849,6 +863,7 @@ $('leave').addEventListener('click', async () => {
   if (unsubscribeRoom) { unsubscribeRoom(); unsubscribeRoom = null; }
   try {
     if (disconnectHandle) { await disconnectHandle.cancel().catch(() => {}); disconnectHandle = null; }
+    if (presenceRef) await remove(presenceRef);
     if (seatRef) await remove(seatRef);
   } catch { /* leaving is best effort */ }
   localStorage.removeItem(KEY_PW);

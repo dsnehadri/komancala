@@ -151,8 +151,10 @@ Without them those checks are skipped, so the passwords stay out of the repo.
 - [firebase-config.js](firebase-config.js) — your project's config.
 - [database.rules.json](database.rules.json) — what to paste into the Rules tab.
 
-Seats are released automatically when a player's connection drops, and taken
-back when they reconnect, so a closed tab can't lock the other person out.
+A chair belongs to a password, not to an open page. Closing the app, locking
+your phone or losing signal marks you offline but does not give up your seat —
+your friend can still take their turn, and it will be waiting when you look.
+That is what makes a move now, answered tomorrow, actually work.
 
 Open the same password twice — your laptop and your phone, say — and the second
 one doesn't fight the first for the seat. It says so and offers **TAKE MY

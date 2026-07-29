@@ -6,7 +6,7 @@
 import {
   initialRoom, newGameState, applyMove, seatOf, bothSeated, normalizeRoom,
   reduceClaimSeat, reduceMove, reduceNewGame, NO_TURN, identify, decryptPhoto, sowPath,
-  reduceKickSeats, makeLineBag, randomBoard,
+  reduceKickSeats, makeLineBag, randomBoard, seatPresent,
 } from './game.js';
 
 const lines = [];
@@ -92,16 +92,21 @@ check('reconnect leaves the other player alone', seatOf(dropped, 'bob') === 1, d
 
 // another session in your chair — a dead tab of yours, or your phone. Taking it
 // automatically is what made two clients on one password fight forever.
-const occupied = { ...room, seats: { '0': { id: 'alice-old-tab', name: 'Alice' }, '1': room.seats['1'] } };
-check('an occupied chair is not taken automatically',
+const occupied = normalizeRoom({ ...room,
+  seats: { '0': { id: 'alice-other-device', name: 'Alice' }, '1': room.seats['1'] },
+  presence: { '0': true } });
+check('a chair someone is sitting in is not taken automatically',
   reduceClaimSeat(occupied, { id: 'alice', name: 'Alice', seat: 0 }) === undefined);
 const forced = reduceClaimSeat(occupied, { id: 'alice', name: 'Alice', seat: 0, force: true });
 check('but you can take it deliberately', seatOf(forced, 'alice') === 0, forced.seats);
-check('taking it evicts the other session', seatOf(forced, 'alice-old-tab') === null, forced.seats);
+check('taking it evicts the other session', seatOf(forced, 'alice-other-device') === null, forced.seats);
 check('taking it leaves the other player alone', seatOf(forced, 'bob') === 1, forced.seats);
 
-// two clients on one password must settle instead of evicting each other
+// two clients on one password must settle instead of evicting each other. The
+// first one to sit down is marked online by the same write, which is what makes
+// the second one back off.
 let shared = reduceClaimSeat(null, { id: 'phone', name: 'Sne', seat: 0 });
+check('sitting down marks you online in the same write', seatPresent(shared, 0), shared.presence);
 let writes = 0;
 for (let tick = 0; tick < 20; tick++) {
   for (const me of ['phone', 'laptop']) {
@@ -126,6 +131,41 @@ wrongChair = reduceClaimSeat(wrongChair, { id: 'alice', name: 'Alice', seat: 0 }
 check('claiming your seat vacates the other one', seatOf(wrongChair, 'alice') === 0
   && !wrongChair.seats['1'], wrongChair.seats);
 
+// ---- a move must not need the other player to be online
+const bothClaimed = reduceClaimSeat(reduceClaimSeat(null, { id: 'me', name: 'Sne', seat: 0 }),
+  { id: 'her', name: 'Kate', seat: 1 });
+// both chairs owned, both pages since closed
+const bothOwn = normalizeRoom({ ...bothClaimed, presence: {} });
+check('owning a chair is not the same as being online',
+  !!bothOwn.seats['0'] && !!bothOwn.seats['1'] && !seatPresent(bothOwn, 0) && !seatPresent(bothOwn, 1),
+  bothOwn.presence);
+check('I can move with her offline', reduceMove(bothOwn, { id: 'me', pit: 0 }) !== undefined);
+const herTurn = { ...bothOwn, turn: 1 };
+check('she can move with me offline', reduceMove(herTurn, { id: 'her', pit: 0 }) !== undefined);
+check('a move still needs both chairs to have an owner',
+  reduceMove(reduceClaimSeat(null, { id: 'me', name: 'Sne', seat: 0 }), { id: 'me', pit: 0 }) === undefined);
+
+// presence is read back off the room, and only ever means "looking right now"
+const online = normalizeRoom({ ...bothOwn, presence: { '0': true } });
+check('presence is parsed', seatPresent(online, 0) && !seatPresent(online, 1), online.presence);
+check('junk presence is ignored',
+  !seatPresent(normalizeRoom({ ...bothOwn, presence: { '0': 'yes', '2': true } }), 0));
+check('being online changes nothing about whose turn it is',
+  reduceMove(online, { id: 'me', pit: 0 }).turn === reduceMove(bothOwn, { id: 'me', pit: 0 }).turn);
+check('a move keeps everyone\'s presence as it found it',
+  seatPresent(reduceMove(online, { id: 'me', pit: 0 }), 0), reduceMove(online, { id: 'me', pit: 0 }).presence);
+
+// your own chair, held by an old session of yours that is no longer online
+const oldSession = normalizeRoom({ ...bothOwn,
+  seats: { '0': { id: 'my-old-tab', name: 'Sne' }, '1': bothOwn.seats['1'] }, presence: {} });
+check('an offline session does not block you from your chair',
+  seatOf(reduceClaimSeat(oldSession, { id: 'me', name: 'Sne', seat: 0 }), 'me') === 0);
+const liveSession = normalizeRoom({ ...oldSession, presence: { '0': true } });
+check('a live session still does',
+  reduceClaimSeat(liveSession, { id: 'me', name: 'Sne', seat: 0 }) === undefined);
+check('and can still be taken deliberately',
+  seatOf(reduceClaimSeat(liveSession, { id: 'me', name: 'Sne', seat: 0, force: true }), 'me') === 0);
+
 // ---- clearing out stale players
 const twoSeated = reduceClaimSeat(reduceClaimSeat(null, { id: 'alice', name: 'Alice', seat: 0 }),
   { id: 'ghost', name: 'Ghost', seat: 1 });
@@ -144,6 +184,9 @@ check('kicking without a seat is refused',
 check('a live player retakes their seat after a kick',
   seatOf(reduceClaimSeat(kicked, { id: 'ghost', name: 'Ghost', seat: 1 }), 'ghost') === 1);
 check('kicking still empties the chair it needs to', !kicked.seats['1'], kicked.seats);
+check('kicking clears their presence too',
+  !seatPresent(reduceKickSeats(normalizeRoom({ ...twoSeated, presence: { '0': true, '1': true } }),
+    { id: 'alice', name: 'Alice', seat: 0 }), 1));
 
 // ---- permissions
 check('spectator move rejected', reduceMove(room, { id: 'carol', pit: 0 }) === undefined);
@@ -274,11 +317,15 @@ check('the route agrees with the rules',
 // ---- the cat deals its lines from a shuffled deck, not a dice roll
 const deck = ['a', 'b', 'c', 'd', 'e'];
 const draw = makeLineBag(deck);
-const firstCycle = [draw(), draw(), draw(), draw(), draw()];
+const firstCycle = [];
+{ let prev; for (let i = 0; i < deck.length; i++) { prev = draw(prev); firstCycle.push(prev); } }
 check('a full cycle deals every line', eq([...firstCycle].sort(), [...deck].sort()), firstCycle);
 check('a full cycle repeats nothing', new Set(firstCycle).size === deck.length, firstCycle);
 
-const secondCycle = [draw(), draw(), draw(), draw(), draw()];
+// the app always tells the bag what it said last, which is what guards the seam
+const secondCycle = [];
+let previous = firstCycle[firstCycle.length - 1];
+for (let i = 0; i < deck.length; i++) { previous = draw(previous); secondCycle.push(previous); }
 check('the next cycle deals every line again', eq([...secondCycle].sort(), [...deck].sort()), secondCycle);
 check('no repeat across the seam', firstCycle[4] !== secondCycle[0], [firstCycle[4], secondCycle[0]]);
 

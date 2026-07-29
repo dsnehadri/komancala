@@ -5,34 +5,63 @@
         ".read": "$room.matches(/^[0-9a-f]{32}$/)",
         ".write": "$room.matches(/^[0-9a-f]{32}$/)",
         ".validate": "newData.hasChildren(['board', 'turn'])",
-
         "board": {
           ".validate": "newData.hasChildren()",
-          "$slot": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 48" }
+          "$slot": {
+            ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 48"
+          }
         },
-        "turn": { ".validate": "newData.isNumber() && newData.val() >= -1 && newData.val() <= 1" },
-        "over": { ".validate": "newData.isBoolean()" },
-        "winner": { ".validate": "newData.isString() && newData.val().length <= 4" },
-        "gamesPlayed": { ".validate": "newData.isNumber()" },
-
+        "turn": {
+          ".validate": "newData.isNumber() && newData.val() >= -1 && newData.val() <= 1"
+        },
+        "over": {
+          ".validate": "newData.isBoolean()"
+        },
+        "winner": {
+          ".validate": "newData.isString() && newData.val().length <= 4"
+        },
+        "gamesPlayed": {
+          ".validate": "newData.isNumber()"
+        },
         "lastMove": {
-          "player": { ".validate": "newData.isNumber()" },
-          "pit": { ".validate": "newData.isNumber()" },
-          "extraTurn": { ".validate": "newData.isBoolean()" },
-          "captured": { ".validate": "newData.isNumber()" },
-          "$other": { ".validate": false }
+          "player": {
+            ".validate": "newData.isNumber()"
+          },
+          "pit": {
+            ".validate": "newData.isNumber()"
+          },
+          "extraTurn": {
+            ".validate": "newData.isBoolean()"
+          },
+          "captured": {
+            ".validate": "newData.isNumber()"
+          },
+          "$other": {
+            ".validate": false
+          }
         },
-
         "seats": {
           "$seat": {
             ".validate": "$seat.matches(/^[01]$/) && newData.hasChildren(['id'])",
-            "id": { ".validate": "newData.isString() && newData.val().length <= 64" },
-            "name": { ".validate": "newData.isString() && newData.val().length <= 20" },
-            "$other": { ".validate": false }
+            "id": {
+              ".validate": "newData.isString() && newData.val().length <= 64"
+            },
+            "name": {
+              ".validate": "newData.isString() && newData.val().length <= 20"
+            },
+            "$other": {
+              ".validate": false
+            }
           }
         },
-
-        "$other": { ".validate": false }
+        "presence": {
+          "$seat": {
+            ".validate": "$seat.matches(/^[01]$/) && newData.isBoolean()"
+          }
+        },
+        "$other": {
+          ".validate": false
+        }
       }
     }
   }

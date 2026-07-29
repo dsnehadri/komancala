@@ -84,9 +84,18 @@ export function normalizeRoom(raw) {
       seats[key] = { id: seat.id, name: typeof seat.name === 'string' ? seat.name : '' };
     }
   }
+  // Who is online right now, which is a different question from whose chair is
+  // whose. Seats persist so a move can be answered hours later; presence is
+  // wiped by the server the moment a connection drops.
+  const presence = {};
+  for (const key of ['0', '1']) {
+    if (raw.presence && raw.presence[key] === true) presence[key] = true;
+  }
+
   const last = raw.lastMove || {};
   return {
     board,
+    presence,
     turn: raw.turn === 0 || raw.turn === 1 ? raw.turn : NO_TURN,
     over: !!raw.over,
     winner: ['none', '0', '1', 'tie'].includes(raw.winner) ? raw.winner : 'none',
@@ -116,7 +125,12 @@ export function seatOf(state, playerId) {
   return null;
 }
 
+// Both chairs have an owner. Not the same as both people being online — that
+// is seatPresent, and it deliberately has no bearing on whether you may move.
 export const bothSeated = (state) => !!(state && state.seats && state.seats['0'] && state.seats['1']);
+
+export const seatPresent = (state, seat) =>
+  !!(state && state.presence && state.presence[String(seat)]);
 
 // Returns { error } or { game } — never mutates what it was given.
 export function applyMove(game, player, pit) {
@@ -232,12 +246,11 @@ export function reduceClaimSeat(state, { id, name, seat, force = false, board })
   const key = String(seat);
   const sitting = room.seats[key];
 
-  // Somebody else's session is in your chair. From here a dead tab of yours and
-  // a live session on your other device look identical, so taking it back is a
-  // decision for a human: two clients sharing a password would otherwise evict
-  // each other forever, at network speed. Aborting means no write at all, which
-  // is what actually breaks the loop.
-  if (sitting && sitting.id !== id && !force) return undefined;
+  // Somebody else's session owns your chair. If they are online, taking it is a
+  // decision for a human — two live clients on one password would otherwise
+  // evict each other forever, at network speed, and aborting is what stops
+  // that. If they are not online it is just your own old session, so sit down.
+  if (sitting && sitting.id !== id && !force && seatPresent(room, seat)) return undefined;
 
   const seats = { ...room.seats };
   seats[key] = { id, name: name || `Player ${seat + 1}` };
@@ -246,7 +259,12 @@ export function reduceClaimSeat(state, { id, name, seat, force = false, board })
   const other = String(1 - seat);
   if (seats[other] && seats[other].id === id) delete seats[other];
 
-  return { ...room, seats };
+  // Sitting down and being online are the same write. Done separately there is
+  // a window where your chair looks unattended, and a second client on the same
+  // password would take it — which is the fight this is all meant to prevent.
+  const presence = { ...room.presence, [key]: true };
+
+  return { ...room, seats, presence };
 }
 
 // Clears both chairs and sits you back down in your own. For when a dead tab
@@ -256,7 +274,11 @@ export function reduceKickSeats(state, { id, name, seat }) {
   if (!state) return undefined;
   const room = normalizeRoom(state);
   if (seat !== 0 && seat !== 1) return undefined;
-  return { ...room, seats: { [String(seat)]: { id, name: name || `Player ${seat + 1}` } } };
+  return {
+    ...room,
+    seats: { [String(seat)]: { id, name: name || `Player ${seat + 1}` } },
+    presence: seatPresent(room, seat) ? { [String(seat)]: true } : {},
+  };
 }
 
 export function reduceMove(state, { id, pit }) {
@@ -264,7 +286,9 @@ export function reduceMove(state, { id, pit }) {
   const room = normalizeRoom(state);
   const seat = seatOf(room, id);
   if (seat === null) return undefined;              // spectators cannot move
-  if (!bothSeated(room)) return undefined;          // nobody to play against
+  // Both chairs must have an owner, but the other player does not have to be
+  // online: the whole point is that a move can sit waiting until they look.
+  if (!bothSeated(room)) return undefined;
   const result = applyMove(room, seat, pit);
   if (result.error) return undefined;
   return { ...room, ...result.game };
