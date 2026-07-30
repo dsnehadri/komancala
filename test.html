@@ -6,7 +6,7 @@
 import {
   initialRoom, newGameState, applyMove, seatOf, bothSeated, normalizeRoom,
   reduceClaimSeat, reduceMove, reduceNewGame, NO_TURN, identify, decryptPhoto, sowPath,
-  reduceKickSeats, makeLineBag, randomBoard, seatPresent, pointsGained,
+  reduceKickSeats, makeLineBag, randomBoard, seatPresent,
 } from './game.js';
 
 const lines = [];
@@ -130,24 +130,6 @@ wrongChair.seats = { '1': { id: 'alice', name: 'Alice' } };
 wrongChair = reduceClaimSeat(wrongChair, { id: 'alice', name: 'Alice', seat: 0 });
 check('claiming your seat vacates the other one', seatOf(wrongChair, 'alice') === 0
   && !wrongChair.seats['1'], wrongChair.seats);
-
-// ---- how much a turn was worth
-const opener = [4,4,4,4,4,4,0,4,4,4,4,4,4,0];
-check('a turn that banks nothing is worth nothing',
-  pointsGained(opener, [0,5,5,5,5,4,0,4,4,4,4,4,4,0], 0) === 0);
-check('a stone sown into your store counts',
-  pointsGained(opener, [4,4,0,5,5,5,1,4,4,4,4,4,4,0], 0) === 1);
-check('a capture counts', pointsGained(opener, [0,5,5,5,0,5,8,0,0,5,5,5,5,0], 0) === 8);
-check('it reads the right store for player 2',
-  pointsGained(opener, [4,4,4,4,4,4,0,4,4,4,4,4,4,11], 1) === 11);
-check('player 2 banking does not count for player 1',
-  pointsGained(opener, [4,4,4,4,4,4,0,4,4,4,4,4,4,11], 0) === 0);
-check('a big haul is over the threshold',
-  pointsGained(opener, [0,0,0,0,0,0,13,0,0,5,5,5,5,0], 0) > 10);
-check('exactly ten is not over the threshold',
-  pointsGained(opener, [0,0,0,0,0,0,10,0,0,5,5,5,5,0], 0) > 10 === false);
-check('it never goes negative', pointsGained([0,0,0,0,0,0,9,0,0,0,0,0,0,0], opener, 0) === 0);
-check('junk in gives zero out', pointsGained(null, undefined, 0) === 0);
 
 // ---- a move must not need the other player to be online
 const bothClaimed = reduceClaimSeat(reduceClaimSeat(null, { id: 'me', name: 'Sne', seat: 0 }),

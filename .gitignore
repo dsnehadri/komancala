@@ -13,9 +13,3 @@ cat-lines.txt
 # any variant of the plaintext lines
 cat-lines*.txt
 
-# ...except the big-haul reaction image, which is meant to be committed
-!bigscore.jpg
-!bigscore.jpeg
-!bigscore.png
-!bigscore.gif
-!bigscore.webp

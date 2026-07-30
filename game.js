@@ -234,15 +234,6 @@ export function sowPath(board, player, pit) {
   return { from, drops, capture, extraTurn };
 }
 
-// How many stones a player banked in one turn: the difference between their
-// store before and after. Counts the capture and anything sown in on the way
-// round, which is what "points this turn" means to a player.
-export function pointsGained(before, after, player) {
-  if (!Array.isArray(before) || !Array.isArray(after)) return 0;
-  const store = STORES[player];
-  return Math.max(0, (Number(after[store]) || 0) - (Number(before[store]) || 0));
-}
-
 // ------------------------------------------------- transaction reducers
 // Each returns a new room state, or undefined to abort the write. Firebase
 // re-runs these against fresh data whenever two people write at once, so they

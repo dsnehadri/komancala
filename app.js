@@ -11,7 +11,7 @@ import { firebaseConfig } from './firebase-config.js';
 import {
   normalizeRoom, seatOf, bothSeated, seatPresent, identify, decryptPhoto, decryptLines,
   sowPath, makeLineBag, reduceClaimSeat, reduceMove, reduceNewGame, reduceKickSeats,
-  randomBoard, pointsGained, NO_TURN,
+  randomBoard, NO_TURN,
 } from './game.js';
 
 const KEY_PW = 'komancala.password';
@@ -27,7 +27,6 @@ const statusEl = $('status');
 const boardEl = $('board');
 const catsEl = $('cats');
 const winPhotoEl = $('winphoto');
-const bigScoreEl = $('bigscore');
 const loginError = $('login-error');
 const gameError = $('game-error');
 
@@ -622,41 +621,6 @@ function buildZap(screen) {
   return svg;
 }
 
-// A haul this big deserves a reaction: the picture fades up over the board,
-// holds, and fades away again.
-const BIG_HAUL = 10;
-// Whatever you dropped in the folder, in whichever format.
-const BIG_SCORE_IMAGES = ['bigscore.gif', 'bigscore.png', 'bigscore.jpg', 'bigscore.webp'];
-
-let bigScoreTimer = null;
-
-function showBigScore() {
-  const img = bigScoreEl.querySelector('img');
-  if (!img.dataset.ready) return;          // nothing was dropped in; skip quietly
-  bigScoreEl.classList.remove('hidden');
-  bigScoreEl.classList.remove('turning');
-  void bigScoreEl.offsetWidth;             // restart the animation from the top
-  bigScoreEl.classList.add('turning');
-  clearTimeout(bigScoreTimer);
-  bigScoreTimer = setTimeout(() => {
-    bigScoreEl.classList.add('hidden');
-    bigScoreEl.classList.remove('turning');
-  }, 3400);
-}
-
-// Try each candidate filename in turn, and remember if one of them exists.
-(function findBigScoreImage() {
-  const img = bigScoreEl.querySelector('img');
-  let next = 0;
-  const tryOne = () => {
-    if (next >= BIG_SCORE_IMAGES.length) return;
-    img.src = BIG_SCORE_IMAGES[next++];
-  };
-  img.addEventListener('load', () => { img.dataset.ready = '1'; });
-  img.addEventListener('error', tryOne);
-  tryOne();
-})();
-
 // Decrypted photos are kept as blob URLs for the session — decrypting is fast,
 // but there's no reason to do it again every time somebody wins.
 const decrypted = new Map();
@@ -805,10 +769,6 @@ function watchRoom() {
     if (worthAnimating) {
       renderedMove = moveKeyOf(next);
       moveLanded();
-      // Player 1 — whoever holds the first password — hauling in a big turn.
-      if (move.player === 0 && pointsGained(from, next.board, 0) > BIG_HAUL) {
-        setTimeout(showBigScore, 400);     // after the beads have landed
-      }
       const token = await animateSow(from, move);
       if (token !== sowToken) return;      // a newer update took over
     }
